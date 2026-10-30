@@ -26,14 +26,20 @@ NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 
 # url_modele : URL de résultats avec {debut} et {fin} à la place des dates
 # format_date : "%Y-%m-%d" -> 2026-11-03 | "%d/%m/%Y" -> 03/11/2026
+# selecteur_prix = None -> détection automatique des montants en € sur la page
+# (on garde le plus bas au-dessus de PRIX_PLANCHER, pour ignorer prix/jour et options)
+PRIX_PLANCHER = 60
+
 SITES = [
     {
-        "nom": "Site 1 - à remplacer",
-        "url_modele": "https://exemple.com/resultats?pickup={debut}&dropoff={fin}&lieu=TFS",
+        "nom": "Kayak",
+        "url_modele": "https://www.kayak.fr/cars/TFS/{debut}/{fin}?sort=price_a",
         "format_date": "%Y-%m-%d",
-        "selecteur_prix": ".price",
+        "selecteur_prix": None,
         "prix_par_jour": False,
     },
+    # Les sites ci-dessous seront activés dès que Manon aura envoyé un lien de résultats :
+    # DiscoverCars, Cicar, AutoReisen
 ]
 
 MOTS_CAPTCHA = ["captcha", "are you a robot", "êtes-vous un robot",
@@ -88,8 +94,17 @@ async def scanner(page, url, site, duree):
         await page.wait_for_timeout(8000)
         if any(m in (await page.content()).lower() for m in MOTS_CAPTCHA):
             return None, "captcha"
-        textes = await page.locator(site["selecteur_prix"]).all_inner_texts()
-        prix = [p for p in (parse_prix(t) for t in textes) if p and p > 0]
+        if site.get("selecteur_prix"):
+            textes = await page.locator(site["selecteur_prix"]).all_inner_texts()
+            prix = [p for p in (parse_prix(t) for t in textes) if p and p > 0]
+        else:
+            # Détection automatique : tous les montants en € visibles sur la page
+            texte = await page.inner_text("body")
+            montants = re.findall(
+                r"(\d{1,3}(?:[ .\u202f\u00a0]\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s?€"
+                r"|€\s?(\d{1,3}(?:[ ,.\u202f\u00a0]\d{3})*(?:[.,]\d{1,2})?)", texte)
+            prix = [parse_prix(a or b) for a, b in montants]
+            prix = [p for p in prix if p and PRIX_PLANCHER <= p < 10000]
         if not prix:
             return None, "aucun prix trouvé (sélecteur ou URL à vérifier ?)"
         prix_min = min(prix) * (duree if site.get("prix_par_jour") else 1)
