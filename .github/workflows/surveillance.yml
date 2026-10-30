@@ -1,0 +1,24 @@
+name: Surveillance location Tenerife
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # toutes les heures (à hh:17, heure UTC)
+  workflow_dispatch:        # bouton "Run workflow" pour lancer à la main
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer les outils
+        run: |
+          pip install playwright requests
+          python -m playwright install --with-deps chromium
+      - name: Lancer la surveillance
+        run: python surveillance_tenerife_cloud.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
