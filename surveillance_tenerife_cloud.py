@@ -92,7 +92,9 @@ async def scanner(page, url, site, duree):
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=60000)
         await page.wait_for_timeout(8000)
-        if any(m in (await page.content()).lower() for m in MOTS_CAPTCHA):
+        print(f"   page ouverte : {await page.title()!r}")
+        contenu = (await page.content()).lower()
+        if any(m in contenu for m in MOTS_CAPTCHA):
             return None, "captcha"
         if site.get("selecteur_prix"):
             textes = await page.locator(site["selecteur_prix"]).all_inner_texts()
@@ -110,7 +112,9 @@ async def scanner(page, url, site, duree):
         prix_min = min(prix) * (duree if site.get("prix_par_jour") else 1)
         return prix_min, "ok"
     except Exception as e:
-        return None, f"erreur : {e.__class__.__name__}"
+        import traceback
+        ligne = traceback.extract_tb(e.__traceback__)[-1]
+        return None, f"erreur : {e.__class__.__name__} : {e} (ligne {ligne.lineno})"
 
 
 async def main():
