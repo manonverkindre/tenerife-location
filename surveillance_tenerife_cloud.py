@@ -103,12 +103,26 @@ async def ouvrir_autoreisen(page, d, f):
     await page.wait_for_load_state("domcontentloaded")
 
 
+def url_carsrentals(d, f):
+    return ("https://www.cars-rentals.com/frp/?lang=fr&vertical=cars"
+            "&pickup_city=TFS&pickup_airport_code=TFS&pickup_code=mrvl_ap_42577&pickup_ctid=42577"
+            "&pickup_country_name=Espagne&pickup_country_iso_code=ES"
+            f"&pickup_date={d:%m}%2F{d:%d}%2F{d:%Y}&pickup_time={HEURE}"
+            f"&dropoff_date={f:%m}%2F{f:%d}%2F{f:%Y}&dropoff_time={HEURE}"
+            "&is_different_drop=0&locale=fr-FR")
+
+
+def prix_autoreisen(texte):
+    """Prix TOTAL = le montant affiché juste au-dessus du bouton « Reserver »."""
+    totaux = re.findall(r"(\d{1,3}(?:\.\d{3})*,\d{2})\s?€\s*R[ée]server", texte, re.I)
+    return [p for p in (parse_prix(t) for t in totaux) if p]
+
+
+# Les comparateurs (DiscoverCars, Booking.com, Sixt, Skyscanner, Kayak) bloquent
+# les robots : ils sont retirés, on ne force pas leurs protections.
 SITES = [
-    {"nom": "AutoReisen", "ouvrir": ouvrir_autoreisen},
-    {"nom": "DiscoverCars", "url": url_discovercars},
-    {"nom": "Booking.com", "url": url_booking},
-    {"nom": "Sixt", "url": url_sixt},
-    {"nom": "Skyscanner", "url": url_skyscanner},
+    {"nom": "AutoReisen", "ouvrir": ouvrir_autoreisen, "extraire": prix_autoreisen},
+    {"nom": "Cars-rentals", "url": url_carsrentals},   # à l'essai : retiré s'il bloque
 ]
 
 
@@ -181,7 +195,8 @@ async def scanner(page, site, d, f):
             return None, f"BLOQUÉ (anti-robot) - page : {titre!r}", lien
         if any(m in texte for m in MOTS_INDISPO):
             return None, "rien de disponible", lien
-        prix = extraire_prix(await page.inner_text("body"))
+        corps = await page.inner_text("body")
+        prix = site["extraire"](corps) if "extraire" in site else extraire_prix(corps)
         if not prix:
             return None, f"aucun prix trouvé - page : {titre!r}", lien
         return min(prix), "ok", lien
